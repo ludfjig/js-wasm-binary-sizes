@@ -1,0 +1,126 @@
+diff --git c/.gitignore w/.gitignore
+index 8823a6d..0ff16d8 100644
+--- c/.gitignore
++++ w/.gitignore
+@@ -8,8 +8,8 @@ target/
+ /shared
+ examples/hello-world/guest/package-lock.json
+ examples/hello-world/guest/hello.component.wasm
+-/build-debug
+-/build-release
++/build-*/
++/deps/
+ .vscode
+ /package-lock.json
+ .idea
+diff --git a/CMakePresets.json b/CMakePresets.json
+new file mode 100644
+--- /dev/null
++++ b/CMakePresets.json
+@@ -0,0 +1,80 @@
++{
++  "version": 6,
++  "configurePresets": [
++    {
++      "name": "minimal",
++      "displayName": "Minimal Build",
++      "description": "Build with only COMPONENTIZE_EMBEDDING enabled, uses pre-built SpiderMonkey",
++      "generator": "Unix Makefiles",
++      "binaryDir": "${sourceDir}/build-minimal",
++      "cacheVariables": {
++        "CMAKE_BUILD_TYPE": "Release",
++        "ENABLE_BUILTIN_COMPONENTIZE_EMBEDDING": "ON",
++        "ENABLE_BUILTIN_WEB_ABORT": "OFF",
++        "ENABLE_BUILTIN_WEB_BASE64": "OFF",
++        "ENABLE_BUILTIN_WEB_BLOB": "OFF",
++        "ENABLE_BUILTIN_WEB_CONSOLE": "OFF",
++        "ENABLE_BUILTIN_WEB_CRYPTO": "OFF",
++        "ENABLE_BUILTIN_WEB_DOM_EXCEPTION": "OFF",
++        "ENABLE_BUILTIN_WEB_EVENT": "OFF",
++        "ENABLE_BUILTIN_WEB_FETCH": "OFF",
++        "ENABLE_BUILTIN_WEB_FETCH_FETCH_EVENT": "OFF",
++        "ENABLE_BUILTIN_WEB_FILE": "OFF",
++        "ENABLE_BUILTIN_WEB_FORM_DATA": "OFF",
++        "ENABLE_BUILTIN_WEB_GLOBAL_SELF": "OFF",
++        "ENABLE_BUILTIN_WEB_PERFORMANCE": "OFF",
++        "ENABLE_BUILTIN_WEB_QUEUE_MICROTASK": "OFF",
++        "ENABLE_BUILTIN_WEB_STREAMS": "OFF",
++        "ENABLE_BUILTIN_WEB_STRUCTURED_CLONE": "OFF",
++        "ENABLE_BUILTIN_WEB_TEXT_CODEC": "ON",
++        "ENABLE_BUILTIN_WEB_TIMERS": "OFF",
++        "ENABLE_BUILTIN_WEB_URL": "OFF",
++        "ENABLE_BUILTIN_WEB_WORKER_LOCATION": "OFF",
++        "ENABLE_BUILTIN_WPT_SUPPORT": "OFF"
++      }
++    },
++    {
++      "name": "minimal-sm",
++      "displayName": "Minimal Build with Minimal SpiderMonkey",
++      "description": "Build with minimal builtins AND minimal SpiderMonkey (builds SM from source with -Os)",
++      "generator": "Unix Makefiles",
++      "binaryDir": "${sourceDir}/build-minimal-sm",
++      "cacheVariables": {
++        "CMAKE_BUILD_TYPE": "Release",
++        "MINIMAL_SM": "ON",
++        "ENABLE_BUILTIN_COMPONENTIZE_EMBEDDING": "ON",
++        "ENABLE_BUILTIN_WEB_ABORT": "OFF",
++        "ENABLE_BUILTIN_WEB_BASE64": "OFF",
++        "ENABLE_BUILTIN_WEB_BLOB": "OFF",
++        "ENABLE_BUILTIN_WEB_CONSOLE": "OFF",
++        "ENABLE_BUILTIN_WEB_CRYPTO": "OFF",
++        "ENABLE_BUILTIN_WEB_DOM_EXCEPTION": "OFF",
++        "ENABLE_BUILTIN_WEB_EVENT": "OFF",
++        "ENABLE_BUILTIN_WEB_FETCH": "OFF",
++        "ENABLE_BUILTIN_WEB_FETCH_FETCH_EVENT": "OFF",
++        "ENABLE_BUILTIN_WEB_FILE": "OFF",
++        "ENABLE_BUILTIN_WEB_FORM_DATA": "OFF",
++        "ENABLE_BUILTIN_WEB_GLOBAL_SELF": "OFF",
++        "ENABLE_BUILTIN_WEB_PERFORMANCE": "OFF",
++        "ENABLE_BUILTIN_WEB_QUEUE_MICROTASK": "OFF",
++        "ENABLE_BUILTIN_WEB_STREAMS": "OFF",
++        "ENABLE_BUILTIN_WEB_STRUCTURED_CLONE": "OFF",
++        "ENABLE_BUILTIN_WEB_TEXT_CODEC": "ON",
++        "ENABLE_BUILTIN_WEB_TIMERS": "OFF",
++        "ENABLE_BUILTIN_WEB_URL": "OFF",
++        "ENABLE_BUILTIN_WEB_WORKER_LOCATION": "OFF",
++        "ENABLE_BUILTIN_WPT_SUPPORT": "OFF"
++      }
++    },
++    {
++      "name": "release",
++      "displayName": "Release Build",
++      "description": "Standard release build with all defaults",
++      "generator": "Unix Makefiles",
++      "binaryDir": "${sourceDir}/build-release",
++      "cacheVariables": {
++        "CMAKE_BUILD_TYPE": "Release"
++      }
++    }
++  ]
++}
+diff --git c/embedding/embedding.cpp w/embedding/embedding.cpp
+index 68463f8..968d868 100644
+--- c/embedding/embedding.cpp
++++ w/embedding/embedding.cpp
+@@ -1,6 +1,8 @@
+ #include "embedding.h"
+ #include "debugger.h"
++#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
+ #include "builtins/web/performance.h"
++#endif
+ 
+ namespace builtins::web::console {
+ 
+@@ -155,10 +157,12 @@ __attribute__((export_name("call"))) uint32_t call(uint32_t fn_idx,
+     content_debugger::maybe_init_debugger(Runtime.engine, true);
+     js::ResetMathRandomSeed(Runtime.cx);
+     Runtime.first_call = false;
++#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
+     if (Runtime.clocks) {
+       builtins::web::performance::Performance::timeOrigin.emplace(
+           std::chrono::high_resolution_clock::now());
+     }
++#endif
+   }
+   if (Runtime.cur_fn_idx != -1) {
+     Runtime.engine->abort("(call) unexpected call state, post_call was not called after last call");

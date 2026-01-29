@@ -1,0 +1,16 @@
+{
+  "name": "handler",
+  "version": "1.0.0",
+  "main": "handler.js",
+  "scripts": {
+    "build": "jco componentize handler.js --wit ../component.wit -d all -o handler.wasm"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "file:../../../ComponentizeJS",
+    "@bytecodealliance/jco": "file:../../../jco/packages/jco",
+    "esbuild": "^0.25.5"
+  }
+}

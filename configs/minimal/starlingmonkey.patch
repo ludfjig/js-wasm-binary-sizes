@@ -1,0 +1,147 @@
+diff --git c/builtins/web/structured-clone.cpp w/builtins/web/structured-clone.cpp
+index e243964..1e98ef1 100644
+--- c/builtins/web/structured-clone.cpp
++++ w/builtins/web/structured-clone.cpp
+@@ -1,5 +1,7 @@
+ #include "structured-clone.h"
++#ifdef ENABLE_BUILTIN_WEB_BLOB
+ #include "blob.h"
++#endif
+ 
+ #include "dom-exception.h"
+ #include "mozilla/Assertions.h"
+@@ -50,6 +52,7 @@ JSObject *ReadStructuredClone(JSContext *cx, JSStructuredCloneReader *r,
+     return params_obj;
+ 
+   }
++#ifdef ENABLE_BUILTIN_WEB_BLOB
+   case SCTAG_DOM_BLOB: {
+     JS::RootedString contentType(cx, JS_GetEmptyString(cx));
+     UniqueChars chars(reinterpret_cast<char *>(bytes));
+@@ -57,6 +60,7 @@ JSObject *ReadStructuredClone(JSContext *cx, JSStructuredCloneReader *r,
+     RootedObject blob(cx, blob::Blob::create(cx, std::move(chars), len, contentType));
+     return blob;
+   }
++#endif
+   default: {
+     MOZ_ASSERT_UNREACHABLE("structured-clone undefined tag");
+     return nullptr;
+@@ -80,12 +84,14 @@ bool WriteStructuredClone(JSContext *cx, JSStructuredCloneWriter *w, JS::HandleO
+         !JS_WriteBytes(w, (void *)slice.data, slice.len)) {
+       return false;
+     }
++#ifdef ENABLE_BUILTIN_WEB_BLOB
+   } else if (blob::Blob::is_instance(obj)) {
+     auto *data = blob::Blob::blob(obj);
+     if (!JS_WriteUint32Pair(w, SCTAG_DOM_BLOB, data->length()) ||
+         !JS_WriteBytes(w, (void *)data->begin(), data->length())) {
+       return false;
+     }
++#endif
+   } else {
+     return dom_exception::DOMException::raise(cx, "The object could not be cloned", "DataCloneError");
+   }
+diff --git c/builtins/web/url.cpp w/builtins/web/url.cpp
+index 83dd01b..babee73 100644
+--- c/builtins/web/url.cpp
++++ w/builtins/web/url.cpp
+@@ -1,12 +1,18 @@
++#ifdef ENABLE_BUILTIN_WEB_BLOB
+ #include "blob.h"
++#endif
+ #include "encode.h"
++#ifdef ENABLE_BUILTIN_WEB_FILE
+ #include "file.h"
++#endif
+ #include "rust-url.h"
+ #include "sequence.hpp"
+ #include "url.h"
+ #include "worker-location.h"
+ 
++#ifdef ENABLE_BUILTIN_WEB_CRYPTO
+ #include "crypto/uuid.h"
++#endif
+ 
+ #include "js/Array.h"
+ #include "js/AllocPolicy.h"
+@@ -17,8 +23,12 @@
+ 
+ namespace builtins::web::url {
+ 
++#ifdef ENABLE_BUILTIN_WEB_BLOB
+ using blob::Blob;
++#endif
++#ifdef ENABLE_BUILTIN_WEB_FILE
+ using file::File;
++#endif
+ using worker_location::WorkerLocation;
+ 
+ bool URLSearchParamsIterator::next(JSContext *cx, unsigned argc, JS::Value *vp) {
+@@ -494,8 +504,10 @@ ACCESSOR(username)
+ #undef ACCESSOR
+ 
+ const JSFunctionSpec URL::static_methods[] = {
++#if defined(ENABLE_BUILTIN_WEB_BLOB) && defined(ENABLE_BUILTIN_WEB_CRYPTO)
+     JS_FN("createObjectURL", createObjectURL, 1, JSPROP_ENUMERATE),
+     JS_FN("revokeObjectURL", revokeObjectURL, 1, JSPROP_ENUMERATE),
++#endif
+     JS_FS_END,
+ };
+ 
+@@ -548,6 +560,7 @@ struct UrlKeyHasher {
+ 
+ static PersistentRooted<JS::GCHashMap<UrlKey, Heap<JSObject *>, UrlKeyHasher, js::SystemAllocPolicy>> URL_STORE;
+ 
++#if defined(ENABLE_BUILTIN_WEB_BLOB) && defined(ENABLE_BUILTIN_WEB_CRYPTO)
+ bool URL::createObjectURL(JSContext *cx, unsigned argc, JS::Value *vp) {
+   CallArgs args = JS::CallArgsFromVp(argc, vp);
+   if (!args.requireAtLeast(cx, "createObjectURL", 1)) {
+@@ -564,9 +577,15 @@ bool URL::createObjectURL(JSContext *cx, unsigned argc, JS::Value *vp) {
+     return false;
+   }
+ 
++#ifdef ENABLE_BUILTIN_WEB_FILE
+   if (!Blob::is_instance(obj) && !File::is_instance(obj)) {
+     return false;
+   }
++#else
++  if (!Blob::is_instance(obj)) {
++    return false;
++  }
++#endif
+ 
+   // To generate a new blob URL, run the following steps:
+   // 1. Let result be the empty string.
+@@ -660,6 +679,7 @@ JSObject *URL::getObjectURL(std::string &url_str) {
+   auto url = URL_STORE.get().lookup(url_str);
+   return url ? url->value() : nullptr;
+ }
++#endif // ENABLE_BUILTIN_WEB_BLOB && ENABLE_BUILTIN_WEB_CRYPTO
+ 
+ const jsurl::JSUrl *URL::url(JSObject *self) {
+   MOZ_ASSERT(is_instance(self));
+diff --git c/builtins/web/url.h w/builtins/web/url.h
+index 5ee7e9b..ecd01fb 100644
+--- c/builtins/web/url.h
++++ w/builtins/web/url.h
+@@ -88,8 +88,10 @@ class URL : public BuiltinImpl<URL, FinalizableClassPolicy> {
+   static bool origin_get(JSContext *cx, unsigned argc, JS::Value *vp);
+   static bool searchParams_get(JSContext *cx, unsigned argc, JS::Value *vp);
+ 
++#if defined(ENABLE_BUILTIN_WEB_BLOB) && defined(ENABLE_BUILTIN_WEB_CRYPTO)
+   static bool createObjectURL(JSContext *cx, unsigned argc, JS::Value *vp);
+   static bool revokeObjectURL(JSContext *cx, unsigned argc, JS::Value *vp);
++#endif
+ 
+   static bool toString(JSContext *cx, unsigned argc, JS::Value *vp);
+   static bool toJSON(JSContext *cx, unsigned argc, JS::Value *vp);
+@@ -121,7 +123,9 @@ public:
+   static bool search(JSContext *cx, JS::HandleObject self, JS::MutableHandleValue rval);
+   static bool username(JSContext *cx, JS::HandleObject self, JS::MutableHandleValue rval);
+ 
++#if defined(ENABLE_BUILTIN_WEB_BLOB) && defined(ENABLE_BUILTIN_WEB_CRYPTO)
+   static JSObject *getObjectURL(std::string &url);
++#endif
+ 
+   static JSObject *create(JSContext *cx, JS::HandleObject self, jsurl::SpecString url_str,
+                           const jsurl::JSUrl *base = nullptr);
