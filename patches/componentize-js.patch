@@ -13,11 +13,37 @@ index 8823a6d..0ff16d8 100644
  .vscode
  /package-lock.json
  .idea
+diff --git c/embedding/embedding.cpp w/embedding/embedding.cpp
+index 68463f8..968d868 100644
+--- c/embedding/embedding.cpp
++++ w/embedding/embedding.cpp
+@@ -1,6 +1,8 @@
+ #include "embedding.h"
+ #include "debugger.h"
++#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
+ #include "builtins/web/performance.h"
++#endif
+ 
+ namespace builtins::web::console {
+ 
+@@ -155,10 +157,12 @@ __attribute__((export_name("call"))) uint32_t call(uint32_t fn_idx,
+     content_debugger::maybe_init_debugger(Runtime.engine, true);
+     js::ResetMathRandomSeed(Runtime.cx);
+     Runtime.first_call = false;
++#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
+     if (Runtime.clocks) {
+       builtins::web::performance::Performance::timeOrigin.emplace(
+           std::chrono::high_resolution_clock::now());
+     }
++#endif
+   }
+   if (Runtime.cur_fn_idx != -1) {
+     Runtime.engine->abort("(call) unexpected call state, post_call was not called after last call");
 diff --git a/CMakePresets.json b/CMakePresets.json
 new file mode 100644
 --- /dev/null
 +++ b/CMakePresets.json
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,82 @@
 +{
 +  "version": 6,
 +  "configurePresets": [
@@ -29,6 +55,7 @@ new file mode 100644
 +      "binaryDir": "${sourceDir}/build-minimal",
 +      "cacheVariables": {
 +        "CMAKE_BUILD_TYPE": "Release",
++        "BUILD_MINIMAL": "ON",
 +        "ENABLE_BUILTIN_COMPONENTIZE_EMBEDDING": "ON",
 +        "ENABLE_BUILTIN_WEB_ABORT": "OFF",
 +        "ENABLE_BUILTIN_WEB_BASE64": "OFF",
@@ -56,11 +83,12 @@ new file mode 100644
 +    {
 +      "name": "minimal-sm",
 +      "displayName": "Minimal Build with Minimal SpiderMonkey",
-+      "description": "Build with minimal builtins AND minimal SpiderMonkey (builds SM from source with -Os)",
++      "description": "Build with minimal builtins AND minimal SpiderMonkey (builds SM from source with -Oz)",
 +      "generator": "Unix Makefiles",
 +      "binaryDir": "${sourceDir}/build-minimal-sm",
 +      "cacheVariables": {
 +        "CMAKE_BUILD_TYPE": "Release",
++        "BUILD_MINIMAL": "ON",
 +        "MINIMAL_SM": "ON",
 +        "ENABLE_BUILTIN_COMPONENTIZE_EMBEDDING": "ON",
 +        "ENABLE_BUILTIN_WEB_ABORT": "OFF",
@@ -98,29 +126,3 @@ new file mode 100644
 +    }
 +  ]
 +}
-diff --git c/embedding/embedding.cpp w/embedding/embedding.cpp
-index 68463f8..968d868 100644
---- c/embedding/embedding.cpp
-+++ w/embedding/embedding.cpp
-@@ -1,6 +1,8 @@
- #include "embedding.h"
- #include "debugger.h"
-+#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
- #include "builtins/web/performance.h"
-+#endif
- 
- namespace builtins::web::console {
- 
-@@ -155,10 +157,12 @@ __attribute__((export_name("call"))) uint32_t call(uint32_t fn_idx,
-     content_debugger::maybe_init_debugger(Runtime.engine, true);
-     js::ResetMathRandomSeed(Runtime.cx);
-     Runtime.first_call = false;
-+#ifdef ENABLE_BUILTIN_WEB_PERFORMANCE
-     if (Runtime.clocks) {
-       builtins::web::performance::Performance::timeOrigin.emplace(
-           std::chrono::high_resolution_clock::now());
-     }
-+#endif
-   }
-   if (Runtime.cur_fn_idx != -1) {
-     Runtime.engine->abort("(call) unexpected call state, post_call was not called after last call");

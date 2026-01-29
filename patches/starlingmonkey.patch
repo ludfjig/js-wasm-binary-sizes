@@ -1,3 +1,52 @@
+diff --git c/CMakeLists.txt w/CMakeLists.txt
+index d7054b9..c8ea948 100644
+--- c/CMakeLists.txt
++++ w/CMakeLists.txt
+@@ -3,6 +3,14 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+ 
++# BUILD_MINIMAL option - use -Oz for size optimization
++option(BUILD_MINIMAL "Build with size optimizations (-Oz)" OFF)
++if(BUILD_MINIMAL)
++    message(STATUS "BUILD_MINIMAL enabled - using -Oz size optimizations")
++    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Oz")
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Oz")
++endif()
++
+ if (DEFINED ENV{HOST_API})
+     set(HOST_API $ENV{HOST_API})
+     if (EXISTS ${HOST_API})
+@@ -75,20 +83,27 @@ target_link_libraries(starling-raw.wasm PRIVATE host_api extension_api builtins
+ 
+ option(USE_WASM_OPT "use wasm-opt to optimize the StarlingMonkey binary" ON)
+ 
++# Choose wasm-opt optimization level based on BUILD_MINIMAL
++if(BUILD_MINIMAL)
++    set(WASM_OPT_LEVEL "-Oz")
++else()
++    set(WASM_OPT_LEVEL "-O3")
++endif()
++
+ # For release builds, use wasm-opt to optimize the generated wasm file.
+ if (USE_WASM_OPT)
+     if (CMAKE_BUILD_TYPE STREQUAL "Release")
+         add_custom_command(
+                 TARGET starling-raw.wasm
+                 POST_BUILD
+-                COMMAND ${WASM_OPT} --strip-debug -O3 -o starling-raw.wasm starling-raw.wasm
++                COMMAND ${WASM_OPT} --strip-debug ${WASM_OPT_LEVEL} -o starling-raw.wasm starling-raw.wasm
+                 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+         )
+     elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+         add_custom_command(
+                 TARGET starling-raw.wasm
+                 POST_BUILD
+-                COMMAND ${WASM_OPT} -O3 -g -o starling-raw.wasm starling-raw.wasm
++                COMMAND ${WASM_OPT} ${WASM_OPT_LEVEL} -g -o starling-raw.wasm starling-raw.wasm
+                 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+         )
+     endif()
 diff --git c/builtins/web/structured-clone.cpp w/builtins/web/structured-clone.cpp
 index e243964..1e98ef1 100644
 --- c/builtins/web/structured-clone.cpp
@@ -145,3 +194,61 @@ index 5ee7e9b..ecd01fb 100644
  
    static JSObject *create(JSContext *cx, JS::HandleObject self, jsurl::SpecString url_str,
                            const jsurl::JSUrl *base = nullptr);
+diff --git c/cmake/spidermonkey.cmake w/cmake/spidermonkey.cmake
+index 838b76f..ac7838d 100644
+--- c/cmake/spidermonkey.cmake
++++ w/cmake/spidermonkey.cmake
+@@ -9,6 +9,7 @@ else()
+ endif()
+ 
+ option(WEVAL "Build with a SpiderMonkey variant that supports weval-based AOT compilation" OFF)
++option(MINIMAL_SM "Build a minimal SpiderMonkey with size optimizations" OFF)
+ 
+ if (WEVAL)
+     set(SM_BUILD_TYPE "${SM_BUILD_TYPE}_weval")
+@@ -23,6 +24,8 @@ endif()
+ if (DEFINED ENV{SPIDERMONKEY_BINARIES})
+     set(SM_LIB_DIR $ENV{SPIDERMONKEY_BINARIES})
+     message(STATUS "Using pre-built SpiderMonkey artifacts from local directory ${SM_LIB_DIR}")
++elseif(MINIMAL_SM)
++    message(STATUS "MINIMAL_SM enabled - will build SpiderMonkey from source with size optimizations")
+ else()
+     set(SM_URL https://github.com/bytecodealliance/starlingmonkey/releases/download/libspidermonkey_${SM_TAG}/spidermonkey-static-${SM_BUILD_TYPE}.tar.gz)
+     message(STATUS "Checking for pre-built SpiderMonkey artifacts at ${SM_URL}")
+@@ -114,15 +117,33 @@ ac_add_options --disable-shared-js
+ ac_add_options --disable-shared-memory
+ ac_add_options --disable-tests
+ ac_add_options --disable-clang-plugin
+-ac_add_options --enable-jitspew
+-ac_add_options --enable-optimize=-O3
+-ac_add_options --enable-js-streams
+ ac_add_options --enable-portable-baseline-interp
+ ac_add_options --prefix=${SM_OBJ_DIR}/dist
+ mk_add_options MOZ_OBJDIR=${SM_OBJ_DIR}
+ mk_add_options AUTOCLOBBER=1
+ ")
+ 
++    # Size vs speed optimization
++    if(MINIMAL_SM)
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --enable-optimize=-Oz\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-jitspew\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-js-streams\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-profiling\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-gczeal\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-spidermonkey-telemetry\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --wasm-no-experimental\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-multi-memory\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-js-string-builtins\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-memory64\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-memory-control\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-branch-hinting\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --disable-wasm-type-reflections\n")
++    else()
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --enable-jitspew\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --enable-optimize=-O3\n")
++        string(APPEND MOZCONFIG_CONTENT "ac_add_options --enable-js-streams\n")
++    endif()
++
+     # Add WASI sysroot if available
+     if(DEFINED ENV{WASI_SYSROOT})
+         string(APPEND MOZCONFIG_CONTENT "ac_add_options --with-sysroot=\"$ENV{WASI_SYSROOT}\"\n")
